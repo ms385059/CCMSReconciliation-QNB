@@ -1,6 +1,7 @@
 ﻿using Avanza.CCMS.DAL;
 using Avanza.iSuite.DAL;
 using ClosedXML.Excel;
+using DAL;
 using DocumentFormat.OpenXml.Office2021.DocumentTasks;
 using Encryption;
 using ExcelDataReader;
@@ -60,7 +61,7 @@ namespace ReconciliationScheduleService
         void ScheduleThreadForExecution(object state)
         {
             timer = new Timer(DoWork, null, new TimeSpan(0, 0, 15), new TimeSpan(0, 0, 0, 0, -1));
-            timerUpdateReconBatchStatus = new Timer(UpdateReconBatchStatus, null, new TimeSpan(0, 1, 0), new TimeSpan(0, 0, 0, 0, -1));
+            //timerUpdateReconBatchStatus = new Timer(UpdateReconBatchStatus, null, new TimeSpan(0, 1, 0), new TimeSpan(0, 0, 0, 0, -1));
         }
         private void DoInitialize()
         {
@@ -108,10 +109,9 @@ namespace ReconciliationScheduleService
                     }
                 }
 
-                if (!Directory.Exists(recon.BackupFolderPath))
-                {
-                    Directory.CreateDirectory(recon.BackupFolderPath);
-                }
+                Directory.CreateDirectory(recon.BackupFolderPath);
+                Directory.CreateDirectory(Path.Combine(recon.BackupFolderPath, "SwitchFiles"));
+                Directory.CreateDirectory(Path.Combine(recon.BackupFolderPath, "HostFiles"));
                 if (atmData == null)
                 {
                     atmData = new Dictionary<string, int>();
@@ -208,66 +208,10 @@ namespace ReconciliationScheduleService
                 }
                 XmlLogWriter.InitXmlLogWriter(String.Format("{0}\\CCMSReconciliationScheduleService_{1:yyMMMdd}.txt", appSettings.LogFilePath, DateTime.Now));
                 LogableTask.LogMonoActivityTask("writeVersion", MethodBase.GetCurrentMethod(), TraceLevel.Info, "Version: Reconciliation Schedular 6.2.0, Build date : 11/08/2026");
-                //List<string> trxDateforKnetParse = new List<string>();
                 List<int> batchIDforKnetParse = new List<int>();
 
 
-
-
-                //TimeSpan _time = TimeSpan.Parse(recon.ServiceRunTime);
-                //var date = DateTime.Now;
-                //var _current = TimeSpan.Parse(date.ToString("HH:mm:ss"));
-                //var temp = new TimeSpan(24, 0, 0) + _time - _current;
-                //LogableTask.LogMonoActivityTask("HoursRemaining", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, " Hours Remaining: " + temp.ToString());
-                //                DoWork_Ver2();
-                //if (minuteSchedule != "1")
-                //{
-                //    //timer = new Timer(SendEmail, null, temp, new TimeSpan(0, 24, 0, 0));
-                //    timer = new Timer(DoWork_Ver2, null, temp, new TimeSpan(0, 24, 0, 0));
-                //    //timer = new Timer(DoWork, null, temp, new TimeSpan(0, 24, 0, 0));
-                //}
-                //else
-                //{
-                //    //timer = new Timer(SendEmail, null, new TimeSpan(0, 1, 0), new TimeSpan(0, 0, 5, 0));
-                //    timer = new Timer(DoWork_Ver2, null, new TimeSpan(1, 0, 0), new TimeSpan(0, 0, 1, 0));//360
-                //    //  timer = new Timer(DoWork, null, new TimeSpan(0, 1, 0), new TimeSpan(0, 0, 5, 0));
-                //}
-
-                //               EventLog.WriteEntry("ReconciliationScheduleService", "Service Started Successfully", EventLogEntryType.Information);
-                //catch (Exception ex)
-                //{
-                //    //trying to log error in event log if its not full.
-                //    try
-                //    {
-                //        EventLog.WriteEntry("ReconciliationSchedular", ex.Message + " " + ex.StackTrace, EventLogEntryType.Error);
-                //    }
-                //    catch (Exception innerException)
-                //    {
-                //    }
-                //}
-
-
-                // Execute a query to get all the required Atm records
-
-
-                // Added By Hamza to query Reconciliation Batch at Once, & use it where required. -- 05-Nov-2024
-
-
-
                 CreateBatch();
-
-
-                //Insert host/switch/KNET transactions to each BAtch based on Transaction DATE
-                //files exist check by iyju,
-                //string knetSTFileName = "ST";
-                //string knetSTFilePath = recon.HostFilePath.Replace("host.csv", knetSTFileName + DateTime.Now.AddDays(-1).ToString("yyMMdd") + ".txt");
-
-                //string knetDRVSTFileName = "DRV_ST";
-                //string knetDRVSTFilePath = recon.HostFilePath.Replace("host.csv", knetDRVSTFileName + DateTime.Now.AddDays(-1).ToString("yyMMdd") + ".txt");
-
-                //if (File.Exists(recon.SwitchFilePath) || File.Exists(recon.HostFilePath))
-                //{
-
 
                 //******************************** START ********************************
 
@@ -283,7 +227,7 @@ namespace ReconciliationScheduleService
 
                 bool hostFilesExist = Directory.Exists(recon.HostFilePath) &&
                                       Directory.EnumerateFiles(recon.HostFilePath).Any();
-                
+
                 LogableTask.LogMonoActivityTask("AccessFiles", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"Switch files exist: {switchFilesExist}, Host files exist: {hostFilesExist}");
 
                 if (switchFilesExist || hostFilesExist)
@@ -309,180 +253,97 @@ namespace ReconciliationScheduleService
                                 LogableTask.LogMonoActivityTask("ProcessSwitchFile", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"END - Processing SwitchFile: {file}");
                             }
                         }
-                        
+
                     }
 
                     if (hostFilesExist)
                     {
                         foreach (string file in Directory.EnumerateFiles(recon.HostFilePath))
                         {
-                            if (file.EndsWith(".xlsx"))
+                            //if (file.EndsWith(".xlsx") || file.EndsWith(".txt"))
+                            //{
+                            LogableTask.LogMonoActivityTask("ProcessHostFile", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"BEGIN - Processing HostFile: {file}");
+
+                            var tempBatchIDforHostParse = new List<int>();
+
+                            ProcessHostFile(file, ref isHostReadyforParse, ref tempBatchIDforHostParse);
+
+                            if (isHostReadyforParse)
                             {
-                                LogableTask.LogMonoActivityTask("ProcessHostFile", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"BEGIN - Processing HostFile: {file}");
-
-                                var tempBatchIDforHostParse = new List<int>();
-
-                                ProcessHostFile(file, ref isHostReadyforParse, ref tempBatchIDforHostParse);
-
-                                if (isHostReadyforParse)
-                                {
-                                    batchIDforHostParse = batchIDforHostParse.Union(tempBatchIDforHostParse).ToList();
-                                }
-
-                                LogableTask.LogMonoActivityTask("ProcessHostFile", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"END - Processing HostFile: {file}");
+                                batchIDforHostParse = batchIDforHostParse.Union(tempBatchIDforHostParse).ToList();
                             }
+
+                            LogableTask.LogMonoActivityTask("ProcessHostFile", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"END - Processing HostFile: {file}");
+                            //}
                         }
                     }
 
-                    
-                        ////rerun all batches on the date of any changed batch-- for including cardless and tellerx
-                        //List<int> batchIDforParse = batchIDforSwitchParse.Union(batchIDforHostParse).Union(batchIDforKnetParse).ToList();
-                        //List<string> batchDateforParse = trxDateforSwitchParse.Union(trxDateforHostParse).Union(trxDateforKnetParse).ToList();
-                        //if (batchDateforParse.Count() > 0)
-                        //{
-                        //    List<string> batchDates = new List<string>();
-                        //    foreach (int _batchID in batchIDforParse)
-                        //    {
-                        //        ReconciliationTransactions.DeleteReconciliationTransactionss(" reconciliation_batch_id=" + _batchID);
-                        //        ReconciledTransactions.DeleteReconciledTransactionss(" batch_id=" + _batchID);
+                    bool stateChanged = false;
+                    //rerun only the changed batches
+                    List<int> batchIDforParse = batchIDforSwitchParse.Union(batchIDforHostParse).Union(batchIDforKnetParse).ToList();
+                    foreach (int _batchID in batchIDforParse)
+                    {
 
-                        //        ReconciliationBatch _batch = ReconciliationBatch.LoadReconciliationBatchByPk(_batchID);
-                        //        if (batchIDforSwitchParse.Contains(_batchID) && isSwitchReadyforParse) _batch.IsSwitchParsed = 1;
-                        //        if (batchIDforHostParse.Contains(_batchID) && isHostReadyforParse) _batch.IsHostParsed = 1;
-                        //        if ((batchIDforKnetParse.Contains(_batchID) && isKnetSTReadyforParse) || (isSwitchReadyforParse && hasONUS_SwitchTransactionONLY)) _batch.IsKnetSTParsed = 1;
-                        //        _batch.Status = "Scheduled";
-                        //        _batch.Save();
-                        //        LogableTask.LogMonoActivityTask("BatchId", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Rerun-BatchId = " + _batchID);
-                        //    }
-
-                        //    foreach (string _batchDate in batchDateforParse)
-                        //    {
-                        //        RerunAllBatches(_batchDate);
-                        //    }
-                        //}
-                        bool stateChanged = false;
-                        //rerun only the changed batches
-                        List<int> batchIDforParse = batchIDforSwitchParse.Union(batchIDforHostParse).Union(batchIDforKnetParse).ToList();
-                        foreach (int _batchID in batchIDforParse)
+                        ReconciliationBatch _batch = ReconciliationBatch.LoadReconciliationBatchByPk(_batchID);
+                        if (_batch.BatchDescription == null)
                         {
+                            ReconciliationTransactions.DeleteReconciliationTransactionss(" reconciliation_batch_id=" + _batchID);
+                            ReconciledTransactions.DeleteReconciledTransactionss(" batch_id=" + _batchID);
 
-                            ReconciliationBatch _batch = ReconciliationBatch.LoadReconciliationBatchByPk(_batchID);
-                            if (_batch.BatchDescription == null)
-                            {
-                                ReconciliationTransactions.DeleteReconciliationTransactionss(" reconciliation_batch_id=" + _batchID);
-                                ReconciledTransactions.DeleteReconciledTransactionss(" batch_id=" + _batchID);
-                            }
+                            _batch.NoOfRecordsProcessed = 0;
+                            _batch.NoOfRecordsReconciled = 0;
+                            _batch.NoOfRecordsFailedToReconciled = 0;
 
-                            if (batchIDforSwitchParse.Contains(_batchID))
-                            {
-                                _batch.Status = "Pending Host";
-                                stateChanged = true;
-                                _batch.IsSwitchParsed = 1;
-                            }
-                            if ((batchIDforHostParse.Contains(_batchID)) || (isSwitchReadyforParse && noONUS_SwitchTransactionONLY))
-                            {
-                                _batch.Status = "Scheduled";
-                                stateChanged = true;
-                                _batch.IsHostParsed = 1;
-                            }
-
-
-                            if (_batch.ReprocessCount == null)
-                                _batch.ReprocessCount = 1;
-                            else
-                                _batch.ReprocessCount++;
-
-                            if (_batch.TransactionStartDate < DateTime.Now.AddDays(-1))
-                            {
-                                _batch.Status = "Scheduled";
-                                LogableTask.LogMonoActivityTask("BatchId", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info,
-                                    "BatchId = " + _batchID + ", Transaction Date=" + _batch.TransactionStartDate + " rescheduled");
-                            }
-                            stateChanged = true;
-
-                            if (stateChanged)
-                            {
-                                _batch.LastInvokedAt = DateTime.Now;
-                                _batch.Save();
-                            }
-                                
+                            ReconBatchInfo.DeleteReconBatchInfos("Reconciliation_Batch_Id = " + _batchID);
                         }
-                        //if (isKnetSTReadyforParse)
-                        //{
-                        //    //if (!isKnetSTReadyforParse)
-                        //    //{//set knetst parsed as 1 when the knet st file is empty
-                        //    // // atmData is a Dictionary -- Key = Title && Value == atmID
-                        //    //    foreach (var atm in atmData)
-                        //    //    {
-                        //    //        ReconciliationBatch batchRecon = ReconciliationBatch.LoadReconciliationBatch("transaction_start_date = '"
-                        //    //                   + DateTime.Now.AddDays(-1).ToString("yyyy/MM/dd") + " 00:00:00.000'and atm_id=" + atm.Value);
-                        //    //        if (batchRecon != null)
-                        //    //        {
-                        //    //            batchRecon.IsKnetSTParsed = 1;
-                        //    //            batchRecon.Status = "Scheduled";
-                        //    //            batchRecon.Save();
-                        //    //            LogableTask.LogMonoActivityTask("BatchId", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Rerun-BatchId = " + batchRecon.ReconciliationBatchId);
-                        //    //        }
-                        //    //    }
-                        //    //}
-                        //    string query = "update reconciliation_batch set status = 'Scheduled',Is_KnetST_Parsed=1,is_host_parsed=1,is_switch_parsed=1 where transaction_start_date = convert(datetime, '" +
-                        //       DateTime.Now.AddDays(-1).ToString("dd/MM/yyyy") + "',103)";
-                        //    ConnectionFactory.ExecuteQuery(query);
-                        //}
-                        //Because all 
-                        //for (int i = 0; i < listKNETProcessedDates.Count; i++)
-                        //{
-                        //    string query = "update reconciliation_batch set status = 'Scheduled' where transaction_start_date = convert(datetime, '" +
-                        //        DateTime.ParseExact(listKNETProcessedDates[i], "yyyyMMdd", null).ToString("dd/MM/yyyy") + "',103)";
-                        //    ConnectionFactory.ExecuteQuery(query);
+
+                        if (batchIDforSwitchParse.Contains(_batchID))
+                        {
+                            _batch.Status = _batch.IsHostParsed == 1 ? "Scheduled" : "Pending Host";
+                            stateChanged = true;
+                            _batch.IsSwitchParsed = 1;
+                        }
+                        if (batchIDforHostParse.Contains(_batchID))
+                        {
+                            _batch.Status = _batch.IsSwitchParsed == 1 ? "Scheduled" : "Pending Switch";
+                            stateChanged = true;
+                            _batch.IsHostParsed = 1;
+                        }
 
 
-                        //    LogableTask.LogMonoActivityTask("BatchId", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "executed:" + query);
+                        if (_batch.ReprocessCount == null)
+                            _batch.ReprocessCount = 1;
+                        else
+                            _batch.ReprocessCount++;
 
-                        //}
+                        if (_batch.TransactionStartDate < DateTime.Now.AddDays(-1))
+                        {
+                            _batch.Status = "Scheduled";
+                            LogableTask.LogMonoActivityTask("BatchId", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info,
+                                "BatchId = " + _batchID + ", Transaction Date=" + _batch.TransactionStartDate + " forcefully rescheduled because its transaction date was older than 2 days.");
+                        }
+                        stateChanged = true;
 
+                        if (stateChanged)
+                        {
+                            _batch.LastInvokedAt = DateTime.Now;
+                            _batch.Save();
+                        }
 
-
-
-
-                        //try
-                        //{
-                        //    TimeSpan _time = TimeSpan.Parse(recon.ServiceRunTime);
-                        //    var date = DateTime.Now;
-                        //    var _current = TimeSpan.Parse(date.ToString("HH:mm:ss"));
-                        //    var temp = new TimeSpan(24, 0, 0) + _time - _current;
-                        //    timer = new Timer(SendEmail, null, temp, new TimeSpan(0, 24, 0, 0));
-                        //}
-                        //catch (Exception ex)
-                        //{
-                        //    LogableTask.LogMonoActivityTask("BatchId", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Send email failed = " + ex.Message);
-                        //}
-                    
-
-
-
-                    // LogableTask.LogMonoActivityTask("BatchId", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Rerun-BatchId = " + string.Join(", ", batchID));
-                    //END *************************
-
+                    }
+                   
                 }
                 else
                 {
                     LogableTask.LogMonoActivityTask("Switch_HostFileAbsence", MethodBase.GetCurrentMethod(), TraceLevel.Info, "Switch and Host is missing");
                 }
-
-                //if (!_isFilesinUSE)
-                //{
-                //    _isFilesinUSE = true;
-                //    RemoveRawDuplicate();
-                //    _isFilesinUSE = false;
-                //}
             }
             catch (Exception ex)
             {
                 LogableTask.LogMonoActivityTask("Exception", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Error, ex);
                 if (ex.InnerException != null)
                 {
-                    LogableTask.LogMonoActivityTask("Exception", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Error," Inner: " + ex.InnerException);
+                    LogableTask.LogMonoActivityTask("Exception", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Error, " Inner: " + ex.InnerException);
                 }
                 //EventLog.WriteEntry("CCMSSchedular", "Error in DoWork_Ver2(). detail: " + ex.Message + ex.StackTrace, EventLogEntryType.Error);
             }
@@ -536,8 +397,11 @@ namespace ReconciliationScheduleService
             List<ReconciliationHostData> listReconHostData = new List<ReconciliationHostData>();
             List<ReconciliationBnaHostData> listReconBnaHostData = new List<ReconciliationBnaHostData>();
             ReconciliationDataFeedFiles reconciliationDataFeedFiles = null;
+            ReconciliationHostData hostData = null;
+            ReconciliationBnaHostData hostBnaData = null;
             SqlCommand cmd = null;
             SqlTransaction sqlHostTrxn = null;
+            bool isExcel = false;
             try
             {
                 if (File.Exists(file))
@@ -547,19 +411,48 @@ namespace ReconciliationScheduleService
                     reconciliationDataFeedFiles = PopulateImportFileInfo("Host", file);
                     if (reconciliationDataFeedFiles.Status == "Scheduled")
                     {
-                        DataTable dt = ExcelToDataTable(file, null, 8);
+                        DataTable dt = null;
+
+                        if (file.EndsWith(".xlsx"))
+                        {
+                            dt = ExcelToDataTable(file, null, 8);
+                            isExcel = true;
+                        }
+                        else
+                        {
+                            dt = PipeToDataTable(file);
+                        }
 
                         for (int i = 0; i < dt.Rows.Count; i++)
                         {
                             DataRow dr = dt.Rows[i];
 
-                            string batchAtmTitle = "QNB"+dr[15].ToString().Substring(5);
+                            string batchAtmTitle = null;
+                            if (isExcel)
+                            {
+                                batchAtmTitle = "QNB" + dr[15].ToString().Substring(5);
+                            }
+                            else
+                            {
+                                batchAtmTitle = "QNB" + dr[4].ToString();
+                            }
+                            
 
                             if (atmData.ContainsKey(batchAtmTitle))
                             {
                                 int batchAtmID = atmData[batchAtmTitle];
 
-                                DateTime trxnDate = DateTime.ParseExact(dr[4].ToString().Trim(), "dd/MM/yy HH:mm:ss", null);
+                                var trxnDate = DateTime.MinValue;
+
+                                if (isExcel)
+                                {
+                                    trxnDate = DateTime.ParseExact(dr[4].ToString().Trim(), "dd/MM/yy HH:mm:ss", null);                                  
+                                }
+                                else
+                                {
+                                    trxnDate = DateTime.ParseExact($"{dr[0]} {dr[1]}", "dd-MMM-yy HH:mm:ss.fff", null);
+                                }
+
 
                                 string key = trxnDate.ToString("yyyy/MM/dd") + "_" + batchAtmID;
                                 dynamic batchRecon = null;
@@ -586,73 +479,77 @@ namespace ReconciliationScheduleService
                                 }
                                 if (batchRecon != null)
                                 {
-                                    //TERMID	LOCAL_DATE	LOCAL_TIME	Pan	ACCTNUM	TRACE	MSG	PCODE	AMOUNT	CoreBank_Resp	ACQUIRER	REFNUM
+                                    if (isExcel)
+                                    {
+                                        hostData = new ReconciliationHostData();
+                                        hostData.ReconciliationBatchId = batchRecon.ReconciliationBatchId;
 
-                                    ReconciliationHostData hostData = new ReconciliationHostData();
-                                    hostData.ReconciliationBatchId = batchRecon.ReconciliationBatchId;
+                                        hostData.AtmId = batchAtmTitle;
+                                        hostData.TransactionDate = trxnDate.Date.ToString("dd/MM/yyyy hh:mm:ss tt", CultureInfo.InvariantCulture);
+                                        hostData.TransactionTime = ((int)trxnDate.TimeOfDay.TotalSeconds).ToString();
+                                        hostData.CardNumber = dr[18].ToString();
+                                        hostData.CustomerAccountNo = dr[20].ToString();
+                                        hostData.TransactionSequence = dr[21].ToString();
+                                        hostData.TransactionAmount = decimal.Parse(dr[19].ToString());
+                                        hostData.TransactionResponse = ""; //TODO: UPDATE THIS WHEN STATUS COLUMN AVAILABLE IN EXCEL
+                                        hostData.TransactionType = "Withdrawal";
+                                        hostData.IsKnet = false;
+                                        hostData.TransactionDatetime = trxnDate;
+                                        hostData.DbAtmId = atmData[hostData.AtmId];
+                                        
+                                        listReconHostData.Add(hostData);
+                                        if (!batchIDforHostParse.Contains(batchRecon.ReconciliationBatchId))
+                                            batchIDforHostParse.Add(batchRecon.ReconciliationBatchId);
+                                    }
+                                    else
+                                    {
+                                        hostBnaData = new ReconciliationBnaHostData();
+                                        hostBnaData.ReconciliationBatchId = batchRecon.ReconciliationBatchId;
 
-                                    hostData.AtmId = batchAtmTitle;
-                                    hostData.TransactionDate = trxnDate.Date.ToString("dd/MM/yyyy hh:mm:ss tt", CultureInfo.InvariantCulture);
-                                    hostData.TransactionTime = ((int)trxnDate.TimeOfDay.TotalSeconds).ToString();
-                                    hostData.CardNumber = dr[18].ToString();
-                                    hostData.CustomerAccountNo = dr[20].ToString();
-                                    hostData.TransactionSequence = dr[21].ToString();
-                                    hostData.TransactionAmount = decimal.Parse(dr[19].ToString());
-                                    hostData.TransactionResponse = ""; //TODO: UPDATE THIS WHEN STATUS COLUMN AVAILABLE IN EXCEL
-                                    hostData.TransactionType = dr[13].ToString();//TODO: Need proper transaction_type for transactions from bank.
+                                        hostBnaData.AtmId = batchAtmTitle;
+                                        hostBnaData.TransactionDate = trxnDate.Date.ToString("dd/MM/yyyy hh:mm:ss tt", CultureInfo.InvariantCulture);
+                                        hostBnaData.TransactionTime = ((int)trxnDate.TimeOfDay.TotalSeconds).ToString();
+                                        hostBnaData.CardNumber = dr[10].ToString();
+                                        hostBnaData.CustomerAccountNo = dr[7].ToString();
+                                        hostBnaData.TransactionSequence = dr[3].ToString();
+                                        hostBnaData.TransactionAmount = decimal.Parse(dr[11].ToString());
+                                        hostBnaData.TransactionResponse = ""; //TODO: UPDATE THIS WHEN STATUS COLUMN AVAILABLE IN FILE
+                                        hostBnaData.TransactionType = "Deposit";
+                                        //hostBnaData.IsKnet = false;
+                                        hostBnaData.TransactionDatetime = trxnDate;
+                                        hostBnaData.DbAtmId = atmData[hostBnaData.AtmId];
 
-                                    hostData.IsKnet = false;
+                                        listReconBnaHostData.Add(hostBnaData);
+                                        if (!batchIDforHostParse.Contains(batchRecon.ReconciliationBatchId))
+                                            batchIDforHostParse.Add(batchRecon.ReconciliationBatchId);
 
-                                    //hostData.TransactionDatetime = DateTime.ParseExact(subParts[3].Trim() + subParts[4], "yyyyMMddHH:mm", null);
-                                    hostData.DbAtmId = atmData[hostData.AtmId];
-                                    //hostData.InstitutionIdentifier = hostData.CardNumber.Substring(0, 6);
-                                    //hostData.IsReversal = hostData.TransactionType.ToLower().Contains("correction") | hostData.TransactionType.ToLower().Contains("-r");
-
-
-                                    // Since the host file provided is of Withdrawal only that is why adding to list without check
-                                    listReconHostData.Add(hostData);
-                                    if (!batchIDforHostParse.Contains(batchRecon.ReconciliationBatchId))
-                                        batchIDforHostParse.Add(batchRecon.ReconciliationBatchId);
-
-
+                                    }
+                                  
                                     if (i % 1000 == 0)
-                                        LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, " Host :" + hostData.TransactionType + ", " + hostData.AtmId + ", TSN: " + hostData.TransactionSequence);
-
-
-                                    //if (!trxDateforHostParse.Contains(batchRecon.TransactionStartDate.ToString())) trxDateforHostParse.Add(batchRecon.TransactionStartDate.ToString());
+                                    {
+                                        if (isExcel)
+                                        {
+                                            LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, " Host :" + hostData.TransactionType + ", " + hostData.AtmId + ", TSN: " + hostData.TransactionSequence);
+                                        }
+                                        else
+                                        {
+                                            LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, " Host :" + hostBnaData.TransactionType + ", " + hostBnaData.AtmId + ", TSN: " + hostBnaData.TransactionSequence);
+                                        }
+                                    }
+                                        
                                 }
-                                //else
-                                //{//create batch for this OLD transaction
-                                //    CreateBatch(trxnDate, batchAtmID);
-                                //}
                             }
                             else
                             {
                                 LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Error, $"ATM Does not Exist or ATM is InActive: Title {batchAtmTitle}");
                             }
-                            //check if batch atm title matches the CSV data atm title
-
-                            //for Remote-on us //achw for knet cash withdrawal    acho for knet driven atms
 
                         }
-                        //File.WriteAllText(String.Format("{0}\\ReconcileSchedule_hostCounter.txt", appSettings.LogFilePath), i.ToString());
 
-
-
-
-
-                        //string data1 = Encoding.ASCII.GetString(File.ReadAllBytes(recon.HostFilePath));
-                        //string[] parts1 = data1.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-                        //foreach (string part in parts1)
-                        //{
-                        //    string[] subParts = part.Split(',');
-                        //    ReconciliationHostData hostData = new ReconciliationHostData();
-                        //    ReconciliationBnaHostData BNAhostData = new ReconciliationBnaHostData();
-
-                        //}
-
-                        if (listReconBnaHostData.Count > 0 || listReconHostData.Count > 0)
+                        if (listReconHostData.Count > 0 || listReconBnaHostData.Count > 0)
                         {
+                            LogableTask.LogMonoActivityTask("ProcessHostFile", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $" Withdrawal Count: {listReconHostData.Count} Deposit Count: {listReconBnaHostData.Count}");
+
                             int counter = 0;
                             int timeout = 300;
                             while (true)
@@ -663,10 +560,16 @@ namespace ReconciliationScheduleService
                                     sqlHostTrxn = cmd.Connection.BeginTransaction();
                                     cmd.Transaction = sqlHostTrxn;
                                     cmd.CommandTimeout = timeout;
-                                    //ReconciliationBnaHostData.BulkSave(listReconBnaHostData, sqlHostTrxn);
+                                    ReconciliationBnaHostData.BulkSave(listReconBnaHostData, sqlHostTrxn);
                                     ReconciliationHostData.BulkSave(listReconHostData, sqlHostTrxn, timeout);
                                     UpdateProcessedInfo(reconciliationDataFeedFiles, sqlHostTrxn);
-                                    sqlHostTrxn.Commit(); break;
+
+                                    sqlHostTrxn.Commit();
+                                    sqlHostTrxn = null;
+                                    cmd.Connection.Close();
+                                    cmd = null;
+                                    break;
+
                                 }
                                 catch (Exception ex)
                                 {
@@ -686,8 +589,18 @@ namespace ReconciliationScheduleService
 
 
                         // File.Delete(recon.BackupFolderPath + "\\hostfile" + trxnDate.AddDays(1).ToString("ddMMyyyy") + ".csv");
-                        File.Move(file, recon.BackupFolderPath + "\\hostfile" + DateTime.Now.ToString("ddMMyyyy_HHmmss") + ".xlsx");
-                        LogableTask.LogMonoActivityTask("HosthFileMoved", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"Host File: {file} =>  Moved");
+                        //File.Move(file, recon.BackupFolderPath + "\\hostfile" + DateTime.Now.ToString("ddMMyyyy_HHmmss") + ".xlsx");
+                        LogableTask.LogMonoActivityTask("HostFileMoveAttempt", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Attempting to move Host File.");
+
+                        string fileName = Path.GetFileNameWithoutExtension(file);
+                        string extension = Path.GetExtension(file);
+
+                        File.Move(
+                            file,
+                            Path.Combine(recon.BackupFolderPath, "HostFiles", $"{fileName}_{DateTime.Now.ToString("ddMMyyyy_HHmmss")}{extension}")
+                        );
+
+                        LogableTask.LogMonoActivityTask("HostFileMoved", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"Host File: {file} =>  Moved");
                         isHostReadyforParse = true;
                     }
                     else
@@ -695,8 +608,14 @@ namespace ReconciliationScheduleService
                         LogableTask.LogMonoActivityTask("HosthFileMoved", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"Host File: {file} =>  Already processed before");
                         if (File.Exists(file))
                         {
-                            File.Move(file, recon.BackupFolderPath + "\\hostfile" + DateTime.Now.ToString("ddMMyyyy_HHmmss") + ".xlsx");
-                            LogableTask.LogMonoActivityTask("HosthFileMoved", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"Host File: {file} =>  Moved");
+                            string fileName = Path.GetFileNameWithoutExtension(file);
+                            string extension = Path.GetExtension(file);
+
+                            File.Move(
+                                file,
+                                Path.Combine(recon.BackupFolderPath,"HostFiles", $"{fileName}_PROCESSED_BEFORE_{DateTime.Now.ToString("ddMMyyyy_HHmmss")}{extension}")
+                            );
+                            LogableTask.LogMonoActivityTask("HostFileMoved", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"Host File: {file} =>  Moved");
                             isHostReadyforParse = true;
                         }
                     }
@@ -706,15 +625,18 @@ namespace ReconciliationScheduleService
             }
             catch (Exception ex)
             {
-                if (sqlHostTrxn != null)
-                    sqlHostTrxn.Rollback();
-                if (reconciliationDataFeedFiles != null)
-                    UpdateErrorInfo(reconciliationDataFeedFiles, ex.Message);
-                isHostReadyforParse = false;
-
                 LogableTask.LogMonoActivityTask("Exception", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Error, $"Failed to process Host : {file} => " + ex.ToString());
                 EventLog.WriteEntry("CCMSSchedular", "Error in DoWork_Ver2(). Host file schedule detail: " + ex.Message + ex.StackTrace, EventLogEntryType.Error);
-                throw;
+
+                if (reconciliationDataFeedFiles != null)
+                    UpdateErrorInfo(reconciliationDataFeedFiles, ex.Message);
+
+                if (sqlHostTrxn != null)
+                    sqlHostTrxn.Rollback();
+                
+                isHostReadyforParse = false;
+
+                
             }
             finally
             {
@@ -776,7 +698,7 @@ namespace ReconciliationScheduleService
                         {
                             DataRow dr = dt.Rows[i];
 
-                            string batchAtmTitle = "QNB"+dr[0].ToString().Trim();
+                            string batchAtmTitle = "QNB" + dr[0].ToString().Trim();
 
                             if (atmData.ContainsKey(batchAtmTitle))
                             {
@@ -822,8 +744,6 @@ namespace ReconciliationScheduleService
                                     {
                                         ReconciliationSwitchData switchData = new ReconciliationSwitchData();
 
-                                        //TERMID	LOCAL_DATE	LOCAL_TIME	PAN	ACCTNUM	TRACE	MSG	PCODE	AMOUNT	RESP	ACQUIRER	REFNUM	FEE	ACCEPTORNAM
-
                                         switchData.ReconciliationBatchId = batchRecon.ReconciliationBatchId;
                                         switchData.AtmId = batchAtmTitle;
 
@@ -852,36 +772,7 @@ namespace ReconciliationScheduleService
                                         switchData.IsReversal = false;
                                         switchData.DbAtmId = batchAtmID;
                                         switchData.CardType = dr[18].ToString().Trim();
-                                        /*Row["card_number"] = tran.CardNumber;
-                                        Row["customer_account_no"] = tran.CustomerAccountNo;
-                                        Row["transaction_date"] = tran.TransactionDate;
-                                        Row["transaction_time"] = tran.TransactionTime;
-                                        Row["transaction_amount"] = tran.TransactionAmount;
-                                        Row["transaction_currency"] = tran.TransactionCurrency;
-                                        Row["transaction_sequence"] = tran.TransactionSequence;
-                                        Row["transaction_type"] = tran.TransactionType;
-                                        Row["transaction_response"] = tran.TransactionResponse;
-                                        Row["transaction_settlement_date"] = tran.TransactionSettlementDate;
-                                        Row["card_network"] = tran.CardNetwork;
-                                        Row["card_issuer"] = tran.CardIssuer;
-                                        Row["transaction_datetime"] = tran.TransactionDatetime;
-                                        Row["institution_identifier"] = tran.InstitutionIdentifier;
-                                        Row["is_reversal"] = tran.IsReversal;
-                                        Row["db_atm_id"] = tran.DbAtmId;
-                                        Row["card_type"] = tran.CardType;
-                                         */
-                                        //switchData.TransactionDatetime = DateTime.ParseExact(subParts[3].Trim() + subParts[4], "yyyyMMddHH:mm", null);
-                                        //switchData.DbAtmId = batchAtmID;
-                                        //switchData.InstitutionIdentifier = switchData.CardNumber.Substring(0, 6);
-                                        //switchData.IsReversal = switchData.TransactionType.ToLower().Contains("correction") | switchData.TransactionType.ToLower().Contains("-r");
-                                        //if (switchData.CardIssuer != Customer_FIT_BankName)
-                                        //    hasONUS_SwitchTransactionONLY = false;
-                                        //else
-                                        //    noONUS_SwitchTransactionONLY = false;
-
-                                        //switchData.Save(sqlTrxn.Connection, sqlTrxn); //save only if new entry
-
-
+    
                                         listReconSwitchData.Add(switchData);
 
                                         if (!batchIDforSwitchParse.Contains(batchRecon.ReconciliationBatchId))
@@ -929,29 +820,19 @@ namespace ReconciliationScheduleService
                                     if (i % 1000 == 0)
                                         LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, " Switch : " + dr[11].ToString().Trim() + ", " + batchAtmTitle + ", TSN: " + dr[8].ToString().Trim());
 
-
-
-
-                                    //if (!trxDateforSwitchParse.Contains(batchRecon.TransactionStartDate.ToString())) trxDateforSwitchParse.Add(batchRecon.TransactionStartDate.ToString());
                                 }
-                                //else
-                                //{//create batch for this OLD transaction
-                                //    CreateBatch(trxnDate, batchAtmID);
-                                //}
+
                             }
                             else
                             {
                                 LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Error, $"ATM Does not Exist or ATM is InActive: Title {batchAtmTitle}");
                             }
-                            //}
-
-                            //  isSwitchHeader = false;
-                            //}
-                            //}
                         }
 
                         if (listReconSwitchData.Count > 0 || listReconBNAswitchData.Count > 0)
                         {
+                            LogableTask.LogMonoActivityTask("ProcessSwitchFile", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $" Withdrawal Count: {listReconSwitchData.Count} Deposit Count: {listReconBNAswitchData.Count}");
+
                             int counter = 0;
                             int timeout = 300;
                             while (true)
@@ -965,7 +846,11 @@ namespace ReconciliationScheduleService
                                     ReconciliationSwitchData.BulkSave(listReconSwitchData, sqlTrxn);
                                     ReconciliationBnaSwitchData.BulkSave(listReconBNAswitchData, sqlTrxn);
                                     UpdateProcessedInfo(reconciliationDataFeedFiles, sqlTrxn);
+
                                     sqlTrxn.Commit();
+                                    sqlTrxn = null;
+                                    cmd.Connection.Close();
+                                    cmd = null;
                                     break;
                                 }
                                 catch (Exception ex)
@@ -985,7 +870,20 @@ namespace ReconciliationScheduleService
 
                         }
                         //File.Delete(recon.BackupFolderPath + "\\switchfile" + trxnDate.AddDays(1).ToString("ddMMyyyy") + ".csv");
-                        File.Move(file, recon.BackupFolderPath + "\\switchfile" + DateTime.Now.ToString("ddMMyyyy_HHmmss") + ".xlsx");
+                        // instead of this, simply move the file without chaning name
+
+                        //File.Move(file, recon.BackupFolderPath + "\\switchfile" + DateTime.Now.ToString("ddMMyyyy_HHmmss") + ".xlsx");
+
+                        LogableTask.LogMonoActivityTask("SwitchFileMoveAttempt", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Attempting to move Switch File.");
+
+                        string fileName = Path.GetFileNameWithoutExtension(file);
+                        string extension = Path.GetExtension(file);
+
+                        File.Move(
+                            file,
+                            Path.Combine(recon.BackupFolderPath, "SwitchFiles", $"{fileName}_{DateTime.Now.ToString("ddMMyyyy_HHmmss")}{extension}")
+                        );
+
                         LogableTask.LogMonoActivityTask("SwitchFileMoved", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"Switch File: {file} =>  Moved");
                         isSwitchReadyforParse = true;
                     }
@@ -994,7 +892,15 @@ namespace ReconciliationScheduleService
                         LogableTask.LogMonoActivityTask("SwitchFileMoved", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"Switch File: {file} => Already processed before");
                         if (File.Exists(file))
                         {
-                            File.Move(file, recon.BackupFolderPath + "\\switchfile" + DateTime.Now.ToString("ddMMyyyy_HHmmss") + ".xlsx");
+                            //File.Move(file, recon.BackupFolderPath + "\\switchfile" + DateTime.Now.ToString("ddMMyyyy_HHmmss") + ".xlsx");
+
+                            string fileName = Path.GetFileNameWithoutExtension(file);
+                            string extension = Path.GetExtension(file);
+
+                            File.Move(
+                                file,
+                                Path.Combine(recon.BackupFolderPath,"SwitchFiles",$"{fileName}_PROCESSED_BEFORE_{DateTime.Now.ToString("ddMMyyyy_HHmmss")}{extension}")
+                            );
 
                             LogableTask.LogMonoActivityTask("SwitchFileMoved", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, $"Switch File: {file} =>  Moved");
                             isSwitchReadyforParse = true;
@@ -1004,15 +910,17 @@ namespace ReconciliationScheduleService
             }
             catch (Exception ex)
             {
-                if (sqlTrxn != null)
-                    sqlTrxn.Rollback();
+                LogableTask.LogMonoActivityTask("Exception", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Error, $"Failed to process Switch : {file} => " + ex.ToString());
+                EventLog.WriteEntry("CCMSSchedular", "Error in ProcessSwitchFile. Switch file schedule detail: " + ex.Message + ex.StackTrace, EventLogEntryType.Error);
+
                 if (reconciliationDataFeedFiles != null)
                     UpdateErrorInfo(reconciliationDataFeedFiles, ex.Message);
 
+                if (sqlTrxn != null)
+                    sqlTrxn.Rollback();
+                
                 isSwitchReadyforParse = false;
-                LogableTask.LogMonoActivityTask("Exception", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Error, $"Failed to process Switch : {file} => " + ex.ToString());
-                //EventLog.WriteEntry("CCMSSchedular", "Error in DoWork_Ver2(). Switch file schedule detail: " + ex.Message + ex.StackTrace, EventLogEntryType.Error);
-                throw;
+                
             }
             finally
             {
@@ -1022,16 +930,20 @@ namespace ReconciliationScheduleService
             }
         }
 
-        private static void UpdateProcessedInfo(ReconciliationDataFeedFiles reconciliationDataFeedFiles, SqlTransaction sqlHostTrxn)
+        private static void UpdateProcessedInfo(ReconciliationDataFeedFiles reconciliationDataFeedFiles, SqlTransaction sqlTrxn)
         {
             reconciliationDataFeedFiles.ProcessedDatetime = DateTime.Now;
             reconciliationDataFeedFiles.Status = "Processed";
-            reconciliationDataFeedFiles.Save(sqlHostTrxn.Connection, sqlHostTrxn);
+            reconciliationDataFeedFiles.SourceFilePath = Path.Combine(recon.BackupFolderPath,
+                Path.GetFileName(reconciliationDataFeedFiles.SourceFilePath));
+            reconciliationDataFeedFiles.Save(sqlTrxn.Connection, sqlTrxn);
         }
         private static void UpdateErrorInfo(ReconciliationDataFeedFiles reconciliationDataFeedFiles, string msg)
         {
             reconciliationDataFeedFiles.FailureReason = msg;
             reconciliationDataFeedFiles.Status = "Scheduled";
+            reconciliationDataFeedFiles.SourceFilePath = Path.Combine(recon.BackupFolderPath,
+                Path.GetFileName(reconciliationDataFeedFiles.SourceFilePath));
             reconciliationDataFeedFiles.RetryCount++;
             reconciliationDataFeedFiles.Save();
         }
@@ -1207,7 +1119,7 @@ namespace ReconciliationScheduleService
                             batch.CreationTime = DateTime.Now;
                             batch.CreatedBy = 1;
                             batch.RetryCount = 10;
-                            batch.Status = "Pending Host/Switch";// Scheduled";
+                            batch.Status = "Pending Host/Switch";
                             batch.AtmId = int.Parse(ATMs[i].ToString());
                             batch.AcceptableDifferenceType = recon.DifferenceType;
                             batch.IsHostParsed = 0;
@@ -1279,7 +1191,7 @@ namespace ReconciliationScheduleService
                 batch.TransactionStartDate = trxnDate;
                 batch.TransactionEndDate = trxnDate.AddDays(1);
                 batch.AcceptableDifference = !string.IsNullOrEmpty(recon.Difference) ? Convert.ToDecimal(recon.Difference) : 0;
-                batch.CreationTime = trxnDate.AddDays(1);//DateTime.Now;
+                batch.CreationTime = DateTime.Now;//trxnDate.AddDays(1);
                 batch.CreatedBy = 1;
                 batch.RetryCount = 10;
                 batch.Status = "Pending Host/Switch";// Scheduled";
@@ -1293,984 +1205,6 @@ namespace ReconciliationScheduleService
             }
             return batch;
         }
-        //from iyju
-        //void CreateBatch()
-        //{
-        //    List<ReconciliationBatch> listReconciliationBatch = new List<ReconciliationBatch>();
-        //    ReconciliationBatch batch = null;
-        //    List<int> batchID = new List<int>();
-        //    int i = 0;
-        //    foreach (var atm in atmData)
-        //    {
-        //        string atmTitle = atm.Key;    // The Title of the ATM
-        //        int atmId = atm.Value;        // The corresponding ATMId
-        //        string key = DateTime.Now.AddDays(-1).ToString("yyyy/MM/dd") + "_" + atmId;
-        //        if (!ReconBatchDict.ContainsKey(key))
-        //        {
-        //            batch = new ReconciliationBatch();
-        //            batch.TransactionStartDate = DateTime.Today.AddDays(-1);
-        //            batch.TransactionEndDate = DateTime.Today.AddTicks(-1);
-        //            batch.AcceptableDifference = !string.IsNullOrEmpty(recon.Difference) ? Convert.ToDecimal(recon.Difference) : 0;
-        //            batch.CreationTime = DateTime.Now;
-        //            batch.CreatedBy = 1;
-        //            batch.RetryCount = 10;
-        //            batch.Status = "Pending";// Scheduled";
-        //            batch.AtmId = atmId;
-        //            batch.AcceptableDifferenceType = recon.DifferenceType;
-        //            batch.IsHostParsed = 0;
-        //            batch.IsSwitchParsed = 0;
-        //            batch.IsKnetSTParsed = 0;
-
-        //            if (i == 0)
-        //                batch.BatchDescription = "Remote";
-
-        //            //batch.Save();
-        //            listReconciliationBatch.Add(batch);
-        //            InsertIntoReconciliationBatchDictionary(batch.TransactionStartDate, batch.AtmId, batch.ReconciliationBatchId);
-        //            batchID.Add(batch.ReconciliationBatchId);
-        //            i++;
-        //        }
-        //    }
-        //    if (listReconciliationBatch.Count > 0)
-        //    {
-        //        ManageTx(listReconciliationBatch);
-        //        LogableTask.LogMonoActivityTask("", MethodBase.GetCurrentMethod(), TraceLevel.Info, "Batch created with pending state:" + listReconciliationBatch.Count);
-        //    }
-        //    else
-        //        LogableTask.LogMonoActivityTask("", MethodBase.GetCurrentMethod(), TraceLevel.Info, "Batch already exists for today");
-
-
-        //}
-
-        //void CreateBatch(DateTime trxnDate, int batchAtmID)
-        //{
-        //    try
-        //    {
-        //        if (batchAtmID != 0)
-        //        {
-        //            LogableTask.LogMonoActivityTask("Current DateTime", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Current DateTime: " + DateTime.Now.ToString());
-        //            //one atm
-        //            ReconciliationBatch batch = null;
-        //            string key = trxnDate.ToString("yyyy/MM/dd") + "_" + batchAtmID;
-        //            dynamic batchRecon = null;
-        //            if (ReconBatchDict.ContainsKey(key))
-        //            {
-        //                batchRecon = ReconBatchDict[key];
-        //            }
-        //            else
-        //            {
-        //                batchRecon = ReconciliationBatch.LoadReconciliationBatch(" transaction_start_date ='" + trxnDate.ToString("yyyy/MM/dd") + "' and atm_id=" + batchAtmID);
-        //                if (batchRecon != null)
-        //                {
-        //                    InsertIntoReconciliationBatchDictionary(batchRecon.TransactionStartDate, batchRecon.AtmId, batchRecon.ReconciliationBatchId);
-        //                }
-        //            }
-        //            if (batchRecon == null)
-        //            {//create new batch
-
-        //                batch = new ReconciliationBatch();
-        //                batch.TransactionStartDate = trxnDate;
-        //                batch.TransactionEndDate = trxnDate.AddDays(1);
-        //                batch.AcceptableDifference = !string.IsNullOrEmpty(recon.Difference) ? Convert.ToDecimal(recon.Difference) : 0;
-        //                batch.CreationTime = trxnDate.AddDays(1);
-        //                batch.CreatedBy = 1;
-        //                batch.RetryCount = 10;
-        //                batch.Status = "Pending";// Scheduled";
-        //                batch.AtmId = (batchAtmID);
-        //                batch.AcceptableDifferenceType = recon.DifferenceType;
-        //                batch.IsHostParsed = 0;
-        //                batch.IsSwitchParsed = 0;
-        //                batch.IsKnetSTParsed = 0;
-        //                batch.Save();
-        //                InsertIntoReconciliationBatchDictionary(batch.TransactionStartDate, batch.AtmId, batch.ReconciliationBatchId);
-        //            }
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogableTask.LogMonoActivityTask("Exception", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Error, ex.ToString());
-        //        EventLog.WriteEntry("CCMSSchedular", "Error in CreateBatch(trxnDate,batchAtmID). detail: " + ex.Message + ex.StackTrace, EventLogEntryType.Error);
-        //        throw;
-        //    }
-        //}
-
-        //*************************************************
-        //void DoWork(object state)
-        //{
-        //    try
-        //    {
-        //        XmlLogWriter.InitXmlLogWriter(String.Format("{0}\\ReconcileSchedule_{1:yyMMMdd}.txt", appSettings.LogFilePath, DateTime.Now));
-        //        ThreadPool.SetMaxThreads(5, 5);
-
-        //        string knetTapeFileName = "ST";
-        //        string knetTapeFilePath = recon.HostFilePath.Replace("host.csv", knetTapeFileName + DateTime.Now.AddDays(-1).ToString("yyMMdd") + ".txt");
-
-        //        //files exist check by iyju,
-        //        if (File.Exists(recon.SwitchFilePath) && File.Exists(recon.HostFilePath) && File.Exists(knetTapeFilePath))
-        //        {
-
-        //            bool isValidFiles = true;
-        //            DateTime trxnDate = DateTime.MinValue;
-        //            ///
-        //            string switchdata = Encoding.ASCII.GetString(File.ReadAllBytes(recon.SwitchFilePath));
-        //            string[] switchparts = switchdata.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        //            bool isSwitchHeader = true;
-        //            foreach (string part in switchparts)
-        //            {
-        //                if (!isSwitchHeader)
-        //                {
-        //                    string[] subParts = part.Split(',');
-        //                    if (subParts.Length > 3)
-        //                    {
-        //                        trxnDate = Convert.ToDateTime(subParts[3].Trim().Substring(0, 4) + "/" + subParts[3].Trim().Substring(4, 2) + "/" + subParts[3].Trim().Substring(6, 2));
-        //                        DateTime yesterdayDate = Convert.ToDateTime(DateTime.Now.AddDays(-1).ToString("yyyy/MM/dd") + " 12:00:00AM");
-        //                        if (trxnDate < yesterdayDate)
-        //                        {
-
-        //                            //Old data check by iyju, on request from GBK
-        //                            isValidFiles = false;
-        //                            break;
-        //                        }
-        //                    }
-        //                }
-
-        //                isSwitchHeader = false;
-        //            }
-
-        //            if (isValidFiles) //avoid checking if switch says old date
-        //            {
-        //                string hostdata = Encoding.ASCII.GetString(File.ReadAllBytes(recon.HostFilePath));
-        //                string[] hostparts = hostdata.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        //                foreach (string part in hostparts)
-        //                {
-        //                    string[] subParts = part.Split(',');
-        //                    if (subParts.Length > 3)
-        //                    {
-        //                        trxnDate = Convert.ToDateTime(subParts[3].Trim().Substring(0, 4) + "/" + subParts[3].Trim().Substring(4, 2) + "/" + subParts[3].Trim().Substring(6, 2));
-        //                        DateTime yesterdayDate = Convert.ToDateTime(DateTime.Now.AddDays(-1).ToString("yyyy/MM/dd") + " 12:00:00AM");
-        //                        if (trxnDate < yesterdayDate)
-        //                        {
-        //                            //Old data check by iyju, on request from GBK
-        //                            isValidFiles = false;
-        //                            break;
-        //                        }
-        //                    }
-        //                }
-        //            }
-
-        //            if (isValidFiles) //avoid checking if switch says old date
-        //            {
-        //                string data = Encoding.ASCII.GetString(File.ReadAllBytes(knetTapeFilePath));
-        //                string[] parts = data.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        //                foreach (string part in parts)
-        //                {
-        //                    if (part.Trim() != "")
-        //                    {
-        //                        string transactionDate = "20" + part.Substring(8, 6).Trim();
-        //                        if (transactionDate.Trim() != DateTime.Now.AddDays(-1).ToString("yyyyMMdd").Trim())
-        //                        {
-        //                            //Old data check by iyju, on request from GBK
-        //                            isValidFiles = false;
-        //                            break;
-        //                        }
-        //                    }
-        //                }
-        //            }
-
-        //            if (isValidFiles)
-        //            {
-        //                //check if batch already created even if on same date (today)
-        //                //ReconciliationBatch _batch = ReconciliationBatch.LoadReconciliationBatch(" creation_time ='2022/11/21'")
-        //            }
-        //            if (isValidFiles)
-        //            {
-        //                try
-        //                {
-        //                    LogableTask.DefaultTraceLevel = (TraceLevel)Enum.Parse(typeof(TraceLevel), appSettings.ServiceLogLevel);
-        //                }
-        //                catch
-        //                {
-        //                    LogableTask.DefaultTraceLevel = TraceLevel.Info;
-        //                    LogableTask.LogMonoActivityTask("GetTraceLevel", MethodBase.GetCurrentMethod(), TraceLevel.Error, "Failed to extract trace level from database");
-        //                }
-        //                LogableTask.LogMonoActivityTask("Current DateTime", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Current DateTime: " + DateTime.Now.ToString());
-        //                //File.AppendAllText(path, DateTime.Now +" Hello World from DoWork\n");
-        //                Atm.AtmReader reader = Atm.ExecuteReader("is_active=1");
-        //                StringBuilder sb = new StringBuilder();
-        //                while (reader.Read())
-        //                {
-        //                    sb.Append(reader.CurrentAtm.ATMId + ",");
-        //                }
-        //                reader.Close();
-        //                sb.Remove(sb.Length - 1, 1);
-        //                LogableTask.LogMonoActivityTask("ATMList", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "ATM: " + sb.ToString());
-        //                string ATM_id = sb.ToString();
-        //                ReconciliationBatch batch = null;
-        //                List<int> batchID = new List<int>();
-        //                if (ATM_id.Contains(","))
-        //                {
-        //                    string[] ATMs = ATM_id.Split(',');
-
-        //                    for (int i = 0; i <= ATMs.Length - 1; i++)
-        //                    {
-        //                        batch = new ReconciliationBatch();
-        //                        batch.TransactionStartDate = DateTime.Today.AddDays(-1);
-        //                        batch.TransactionEndDate = DateTime.Today.AddTicks(-1); // yahan se change start karna ha
-        //                        batch.AcceptableDifference = !string.IsNullOrEmpty(recon.Difference) ? Convert.ToDecimal(recon.Difference) : 0;
-        //                        batch.CreationTime = DateTime.Now;
-        //                        batch.CreatedBy = 1;
-        //                        batch.RetryCount = 10;
-        //                        batch.Status = "Scheduled";
-        //                        batch.AtmId = int.Parse(ATMs[i].ToString());
-        //                        batch.AcceptableDifferenceType = recon.DifferenceType;
-        //                        batch.Save();
-        //                        batchID.Add(batch.ReconciliationBatchId);
-        //                    }
-        //                }
-        //                else
-        //                {
-        //                    batch = new ReconciliationBatch();
-        //                    batch.TransactionStartDate = DateTime.Today.AddDays(-1);
-        //                    batch.TransactionEndDate = DateTime.Today.AddTicks(-1); // yahan se change start karna ha
-        //                    batch.AcceptableDifference = !string.IsNullOrEmpty(recon.Difference) ? Convert.ToDecimal(recon.Difference) : 0;
-        //                    batch.CreationTime = DateTime.Now;
-        //                    batch.CreatedBy = 1;
-        //                    batch.RetryCount = 10;
-        //                    batch.Status = "Scheduled";
-        //                    batch.AtmId = int.Parse(ATM_id);
-        //                    batch.AcceptableDifferenceType = recon.DifferenceType;
-        //                    batch.Save();
-        //                    batchID.Add(batch.ReconciliationBatchId);
-        //                }
-
-        //                if (File.Exists(recon.SwitchFilePath))
-        //                {
-        //                    LogableTask.LogMonoActivityTask("SwitchFileExists", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Switch File Exists");
-        //                    foreach (int _batchID in batchID)
-        //                    {
-        //                        string data = Encoding.ASCII.GetString(File.ReadAllBytes(recon.SwitchFilePath));
-        //                        //LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "data =  " + data);
-        //                        string[] parts = data.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        //                        //LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Parts length =  " + parts.Length);
-
-        //                        //Atm.AtmReader reader1 = Atm.ExecuteReader("ATM_id = 12");
-        //                        //StringBuilder sb1 = new StringBuilder();
-        //                        //while (reader1.Read())
-        //                        //{
-        //                        //    sb1.Append(reader1.CurrentAtm.ATMId + ",");
-        //                        //}
-        //                        //to get the atm title of the iterated batchid
-        //                        string batchAtmTitle = "";
-        //                        ReconciliationBatch.ReconciliationBatchReader batchRecon = ReconciliationBatch.ExecuteReader("reconciliation_batch_id = " + _batchID);
-        //                        while (batchRecon.Read())
-        //                        {
-        //                            Atm.AtmReader _batchAtm = Atm.ExecuteReader("ATM_id = " + batchRecon.CurrentReconciliationBatch.AtmId);
-        //                            while (_batchAtm.Read())
-        //                            {
-        //                                batchAtmTitle = _batchAtm.CurrentAtm.Title.Trim();
-        //                            }
-        //                        }
-
-
-        //                        foreach (string part in parts)
-        //                        {
-
-        //                            string[] subParts = part.Split(',');
-        //                            if (subParts[4].Length < 5)
-        //                            {
-        //                                subParts[4] = "0" + subParts[4];
-        //                            }
-        //                            ReconciliationSwitchData switchData = new ReconciliationSwitchData();
-        //                            ReconciliationBnaSwitchData BNAswitchData = new ReconciliationBnaSwitchData();
-        //                            //check if batch atm title matches the CSV data atm title
-        //                            if (batchAtmTitle == subParts[0].Replace("?", "").Trim())
-        //                            {
-        //                                if (subParts[8].Contains("Withdrawal") || subParts[8].Contains("Cwd"))
-        //                                {
-        //                                    switchData.ReconciliationBatchId = _batchID;
-        //                                    switchData.AtmId = subParts[0].Replace("?", "").Trim();
-        //                                    switchData.CardNumber = subParts[1].Trim();
-        //                                    switchData.CustomerAccountNo = subParts[2].Trim();
-        //                                    switchData.TransactionDate = subParts[3].Trim();
-        //                                    switchData.TransactionTime = subParts[4].Trim();
-        //                                    switchData.TransactionAmount = decimal.Parse(subParts[5].Trim());
-        //                                    switchData.TransactionCurrency = subParts[6].Trim();
-        //                                    switchData.TransactionSequence = subParts[7].Trim();
-        //                                    switchData.TransactionType = subParts[8].Trim();
-        //                                    switchData.TransactionResponse = subParts[9].Trim();
-        //                                    switchData.TransactionSettlementDate = DateTime.ParseExact(subParts[10].Trim(), "yyyyMMdd", null);
-        //                                    switchData.CardNetwork = subParts[11].Trim();
-        //                                    switchData.CardIssuer = subParts[12].Trim();
-        //                                    switchData.Save();
-        //                                }
-        //                                else if (subParts[8].Contains("Deposit") && !subParts[8].Contains("Cheque"))
-        //                                {
-        //                                    BNAswitchData.ReconciliationBatchId = _batchID;
-        //                                    BNAswitchData.AtmId = subParts[0].Trim();
-        //                                    BNAswitchData.CardNumber = subParts[1];
-        //                                    BNAswitchData.CustomerAccountNo = subParts[2];
-        //                                    BNAswitchData.TransactionDate = subParts[3].Trim();
-        //                                    BNAswitchData.TransactionTime = subParts[4];
-        //                                    BNAswitchData.TransactionAmount = decimal.Parse(subParts[5]);
-        //                                    BNAswitchData.TransactionCurrency = subParts[6];
-        //                                    BNAswitchData.TransactionSequence = subParts[7];
-        //                                    BNAswitchData.TransactionType = subParts[8];
-        //                                    BNAswitchData.TransactionResponse = subParts[9];
-        //                                    BNAswitchData.TransactionSettlementDate = DateTime.ParseExact(subParts[10], "yyyyMMdd", null);
-        //                                    BNAswitchData.CardNetwork = subParts[11];
-        //                                    BNAswitchData.CardIssuer = subParts[12];
-        //                                    BNAswitchData.Save();
-        //                                }
-        //                                else
-        //                                {
-        //                                    LogableTask.LogMonoActivityTask("TransactionType", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Transaction Type = " + subParts[8]);
-        //                                }
-        //                            }
-
-        //                        }
-        //                    }
-        //                    File.Move(recon.SwitchFilePath, recon.BackupFolderPath + "\\switchfile" + DateTime.Now.ToString("ddMMyyyy") + ".csv");
-
-        //                }
-
-        //                if (File.Exists(recon.HostFilePath))
-        //                {
-        //                    LogableTask.LogMonoActivityTask("HostFileExists", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Host File Exists");
-        //                    foreach (int _batchID in batchID)
-        //                    {
-        //                        string data = Encoding.ASCII.GetString(File.ReadAllBytes(recon.HostFilePath));
-        //                        string[] parts = data.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-
-        //                        //to get the atm title of the iterated batchid
-        //                        string batchAtmTitle = "";
-        //                        ReconciliationBatch.ReconciliationBatchReader batchRecon = ReconciliationBatch.ExecuteReader("reconciliation_batch_id = " + _batchID);
-        //                        while (batchRecon.Read())
-        //                        {
-        //                            Atm.AtmReader _batchAtm = Atm.ExecuteReader("ATM_id = " + batchRecon.CurrentReconciliationBatch.AtmId);
-        //                            while (_batchAtm.Read())
-        //                            {
-        //                                batchAtmTitle = _batchAtm.CurrentAtm.Title.Trim();
-        //                            }
-        //                        }
-
-        //                        foreach (string part in parts)
-        //                        {
-        //                            string[] subParts = part.Split(',');
-        //                            ReconciliationHostData hostData = new ReconciliationHostData();
-        //                            ReconciliationBnaHostData BNAhostData = new ReconciliationBnaHostData();
-        //                            //check if batch atm title matches the CSV data atm title
-        //                            if (batchAtmTitle == subParts[0].Trim())
-        //                            {
-        //                                if (withdrawalTran.ContainsKey(Convert.ToInt32(subParts[8])))
-        //                                {
-        //                                    hostData.ReconciliationBatchId = _batchID;
-        //                                    hostData.AtmId = subParts[0];
-        //                                    hostData.CardNumber = subParts[1];
-        //                                    hostData.CustomerAccountNo = subParts[2];
-        //                                    hostData.TransactionDate = subParts[3];
-        //                                    hostData.TransactionTime = subParts[4];
-        //                                    hostData.TransactionAmount = decimal.Parse(subParts[5]);
-        //                                    hostData.TransactionCurrency = subParts[6];
-        //                                    hostData.TransactionSequence = subParts[7];
-        //                                    hostData.TransactionType = withdrawalTran[Convert.ToInt32(subParts[8])];
-        //                                    hostData.TransactionResponse = subParts[9];
-        //                                    hostData.TransactionSettlementDate = DateTime.ParseExact(subParts[10], "yyyyMMdd", null);
-        //                                    hostData.CardNetwork = subParts[11];
-        //                                    hostData.CardIssuer = subParts[12];
-        //                                    hostData.CardAcquirer = Customer_FIT_BankName;// "GBK"; //always  GBK for ON US Withdrawal
-        //                                    hostData.IsKnet = false;
-        //                                    hostData.Save();
-        //                                }
-        //                                else if (depositTran.ContainsKey(Convert.ToInt32(subParts[8])))
-        //                                {
-        //                                    BNAhostData.ReconciliationBatchId = _batchID;
-        //                                    BNAhostData.AtmId = subParts[0];
-        //                                    BNAhostData.CardNumber = subParts[1];
-        //                                    BNAhostData.CustomerAccountNo = subParts[2];
-        //                                    BNAhostData.TransactionDate = subParts[3];
-        //                                    BNAhostData.TransactionTime = subParts[4];
-        //                                    BNAhostData.TransactionAmount = decimal.Parse(subParts[5]);
-        //                                    BNAhostData.TransactionCurrency = subParts[6];
-        //                                    BNAhostData.TransactionSequence = subParts[7];
-        //                                    BNAhostData.TransactionType = depositTran[Convert.ToInt32(subParts[8])];
-        //                                    BNAhostData.TransactionResponse = subParts[9];
-        //                                    BNAhostData.TransactionSettlementDate = DateTime.ParseExact(subParts[10], "yyyyMMdd", null);
-        //                                    BNAhostData.CardNetwork = subParts[11];
-        //                                    BNAhostData.CardIssuer = subParts[12];
-        //                                    BNAhostData.Save();
-        //                                }
-        //                            }
-        //                        }
-        //                    }
-
-        //                    string data1 = Encoding.ASCII.GetString(File.ReadAllBytes(recon.HostFilePath));
-        //                    string[] parts1 = data1.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        //                    foreach (string part in parts1)
-        //                    {
-        //                        string[] subParts = part.Split(',');
-        //                        ReconciliationHostData hostData = new ReconciliationHostData();
-        //                        ReconciliationBnaHostData BNAhostData = new ReconciliationBnaHostData();
-        //                        //check if batch atm title matches the CSV data atm title
-        //                        if (Cardless_Tellerx_TerminalID == subParts[0].Trim())
-        //                        {
-        //                            if (withdrawalTran.ContainsKey(Convert.ToInt32(subParts[8])))
-        //                            {
-        //                                hostData.ReconciliationBatchId = Cardless_Tellerx_BatchID;
-        //                                hostData.AtmId = subParts[0];
-        //                                hostData.CardNumber = subParts[1];
-        //                                hostData.CustomerAccountNo = subParts[2];
-        //                                hostData.TransactionDate = subParts[3];
-        //                                hostData.TransactionTime = subParts[4];
-        //                                hostData.TransactionAmount = decimal.Parse(subParts[5]);
-        //                                hostData.TransactionCurrency = subParts[6];
-        //                                hostData.TransactionSequence = subParts[7];
-        //                                hostData.TransactionType = withdrawalTran[Convert.ToInt32(subParts[8])];
-        //                                hostData.TransactionResponse = subParts[9];
-        //                                hostData.TransactionSettlementDate = DateTime.ParseExact(subParts[10], "yyyyMMdd", null);
-        //                                hostData.CardNetwork = subParts[11];
-        //                                hostData.CardIssuer = subParts[12];
-        //                                hostData.IsKnet = false;
-        //                                hostData.Save();
-        //                            }
-        //                            else if (depositTran.ContainsKey(Convert.ToInt32(subParts[8])))
-        //                            {
-        //                                BNAhostData.ReconciliationBatchId = Cardless_Tellerx_BatchID;
-        //                                BNAhostData.AtmId = subParts[0];
-        //                                BNAhostData.CardNumber = subParts[1];
-        //                                BNAhostData.CustomerAccountNo = subParts[2];
-        //                                BNAhostData.TransactionDate = subParts[3];
-        //                                BNAhostData.TransactionTime = subParts[4];
-        //                                BNAhostData.TransactionAmount = decimal.Parse(subParts[5]);
-        //                                BNAhostData.TransactionCurrency = subParts[6];
-        //                                BNAhostData.TransactionSequence = subParts[7];
-        //                                BNAhostData.TransactionType = depositTran[Convert.ToInt32(subParts[8])];
-        //                                BNAhostData.TransactionResponse = subParts[9];
-        //                                BNAhostData.TransactionSettlementDate = DateTime.ParseExact(subParts[10], "yyyyMMdd", null);
-        //                                BNAhostData.CardNetwork = subParts[11];
-        //                                BNAhostData.CardIssuer = subParts[12];
-        //                                BNAhostData.Save();
-        //                            }
-        //                        }
-        //                    }
-
-
-        //                    File.Move(recon.HostFilePath, recon.BackupFolderPath + "\\hostfile" + DateTime.Now.ToString("ddMMyyyy") + ".csv");
-        //                }
-
-        //                if (File.Exists(knetTapeFilePath))
-        //                {
-        //                    LogableTask.LogMonoActivityTask("STFileExists", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "ST File Exists");
-        //                    foreach (int _batchID in batchID)
-        //                    {
-
-        //                        //to get the atm title of the iterated batchid
-        //                        string batchAtmTitle = "";
-        //                        ReconciliationBatch.ReconciliationBatchReader batchRecon = ReconciliationBatch.ExecuteReader("reconciliation_batch_id = " + _batchID);
-        //                        while (batchRecon.Read())
-        //                        {
-        //                            Atm.AtmReader _batchAtm = Atm.ExecuteReader("ATM_id = " + batchRecon.CurrentReconciliationBatch.AtmId);
-        //                            while (_batchAtm.Read())
-        //                            {
-        //                                batchAtmTitle = _batchAtm.CurrentAtm.Title.Trim();
-        //                            }
-        //                        }
-        //                        string data = Encoding.ASCII.GetString(File.ReadAllBytes(knetTapeFilePath));
-        //                        string[] parts = data.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        //                        foreach (string part in parts)
-        //                        {
-        //                            if (part.Trim() != "")
-        //                            {
-        //                                string serviceType = part.Substring(0, 4).Trim();
-        //                                string cardAcquirer = part.Substring(98, 4).Trim();
-        //                                string cardIssuer = part.Substring(144, 4).Trim();
-        //                                string transCode = part.Substring(40, 2).Trim();//transCode == "10" WITHDRAWAL
-        //                                string terminalID = part.Substring(102, 16).Trim();
-
-        //                                //Customer_FIT_BankName GBK
-        //                                if (serviceType == "ATM" && cardAcquirer == Customer_FIT_BankName && cardIssuer != Customer_FIT_BankName && transCode == "10"
-        //                                    && terminalID.Trim() == batchAtmTitle.Trim())
-        //                                {
-        //                                    string cardNo = part.Substring(148, 19).Trim().Replace("X", "*");
-        //                                    string transactionDate = "20" + part.Substring(8, 6).Trim();
-        //                                    string transactionTime = part.Substring(14, 2).Trim() + ":" + part.Substring(16, 2).Trim();
-        //                                    string currency = "KWD";
-        //                                    string amount = part.Substring(43, 11).Trim();
-        //                                    string seqNo = part.Substring(28, 12).Trim();
-        //                                    string transactionResponse = part.Substring(167, 2).Trim();
-        //                                    string settlementDate = part.Substring(22, 6).Trim();
-        //                                    string authType = part.Substring(118, 4).Trim();
-        //                                    // int _batchID = 101;
-
-        //                                    ReconciliationHostData hostData = new ReconciliationHostData();
-        //                                    hostData.ReconciliationBatchId = _batchID;
-        //                                    hostData.AtmId = terminalID;
-
-        //                                    string starString = "";
-        //                                    int starstringLen = cardNo.Trim().Length - 10;
-        //                                    for (int sl = 0; sl < starstringLen; sl++)
-        //                                    { starString = starString + "*"; }
-
-        //                                    hostData.CardNumber = cardNo.Substring(0, 6) + starString;
-        //                                    hostData.CardNumber = hostData.CardNumber + cardNo.Substring(hostData.CardNumber.Length, 4);
-
-        //                                    // hostData.CardNumber = cardNo.Substring(0, 6) + "******" + cardNo.Substring(12, cardNo.Length - 12);//4 cardno can be 15/16 digit
-        //                                    // hostData.CustomerAccountNo = subPar;
-        //                                    hostData.TransactionDate = transactionDate;
-        //                                    hostData.TransactionTime = transactionTime;
-        //                                    hostData.TransactionAmount = decimal.Parse(amount) / 1000;
-        //                                    hostData.TransactionCurrency = currency;
-        //                                    hostData.TransactionSequence = seqNo;
-        //                                    if (authType == "0210")
-        //                                        hostData.TransactionType = withdrawalTran[10];  //cash withdrawal-KNET
-        //                                    else if (authType == "0420") //reversal
-        //                                        hostData.TransactionType = withdrawalTran[420];  //withdrawal-KNET-correction
-
-        //                                    hostData.TransactionResponse = transactionResponse;
-        //                                    hostData.TransactionSettlementDate = DateTime.ParseExact(settlementDate, "yyMMdd", null);
-        //                                    // hostData.CardNetwork = subParts[11];
-        //                                    hostData.CardIssuer = cardIssuer;
-        //                                    hostData.CardAcquirer = cardAcquirer;
-        //                                    hostData.IsKnet = true;
-        //                                    hostData.Save();
-
-        //                                    LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "KNET TAPE :" + serviceType +
-        //                                      ", " + terminalID + ", " + cardAcquirer + ", " + cardIssuer);
-        //                                }
-        //                            }
-        //                        }
-
-        //                    }
-        //                    File.Move(knetTapeFilePath, recon.BackupFolderPath + "\\" + knetTapeFileName + "file" + DateTime.Now.ToString("ddMMyyyy") + ".txt");
-        //                    //LogableTask.LogMonoActivityTask("Sleep", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Thread going to sleep");
-
-        //                }
-
-        //                LogableTask.LogMonoActivityTask("BatchId", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "BatchId = " + string.Join(", ", batchID));
-
-        //            }
-        //            else
-        //            {
-        //                LogableTask.DefaultTraceLevel = TraceLevel.Info;
-        //                LogableTask.LogMonoActivityTask("Switch_HostOldData", MethodBase.GetCurrentMethod(), TraceLevel.Error, "Switch or Host or Knet ST File has old data");
-
-        //                if (trxnDate != DateTime.MinValue)
-        //                {
-        //                    //retrieve the batch id
-        //                    StringBuilder batchIDs = new StringBuilder();
-        //                    ReconciliationBatch.ReconciliationBatchReader _batchreader = ReconciliationBatch.ExecuteReader(" transaction_start_date = '" + trxnDate.ToString("yyyy-MM-dd") + " 00:00:00.000'");
-        //                    while (_batchreader.Read())
-        //                    {
-        //                        batchIDs.Append(_batchreader.CurrentReconciliationBatch.ReconciliationBatchId.ToString() + ",");
-        //                    }
-        //                    if (batchIDs.ToString().Trim() != "")
-        //                    {
-        //                        batchIDs.Replace(',', ' ', batchIDs.Length - 1, 1);
-        //                        LogableTask.LogMonoActivityTask("OldBatchIDs", MethodBase.GetCurrentMethod(), TraceLevel.Error, "Old Batch IDs :" + batchIDs.ToString());
-
-        //                        //delete old batch id datas
-        //                        ReconBatchInfo.DeleteReconBatchInfos(" Reconciliation_Batch_Id in (" + batchIDs.ToString() + ")");
-        //                        ReconciliationHostData.DeleteReconciliationHostDatas(" Reconciliation_Batch_Id in (" + batchIDs.ToString() + ")");
-        //                        ReconciliationBnaHostData.DeleteReconciliationBnaHostDatas(" Reconciliation_Batch_Id in (" + batchIDs.ToString() + ")");
-        //                        ReconciliationSwitchData.DeleteReconciliationSwitchDatas(" Reconciliation_Batch_Id in (" + batchIDs.ToString() + ")");
-        //                        ReconciliationBnaSwitchData.DeleteReconciliationBnaSwitchDatas(" Reconciliation_Batch_Id in (" + batchIDs.ToString() + ")");
-
-        //                        //delete tellerx entries (fixed batch id :100)
-        //                        ReconciliationHostData.DeleteReconciliationHostDatas(" Reconciliation_Batch_Id=100 and transaction_date='" + trxnDate.ToString("yyyyMMdd") + "'");
-        //                        ReconciliationBnaHostData.DeleteReconciliationBnaHostDatas(" Reconciliation_Batch_Id=100 and transaction_date='" + trxnDate.ToString("yyyyMMdd") + "'");
-
-        //                        ReconciliationBatch.DeleteReconciliationBatchs(" Reconciliation_Batch_Id in (" + batchIDs.ToString() + ")");
-
-        //                        LogableTask.LogMonoActivityTask("OldBatchIDRemoved", MethodBase.GetCurrentMethod(), TraceLevel.Error, "Old Batch Removed :" + trxnDate.ToString("yyyyMMdd"));
-        //                    }
-
-        //                    //Insert Batch Data--------START ********************************
-
-        //                    try
-        //                    {
-        //                        LogableTask.DefaultTraceLevel = (TraceLevel)Enum.Parse(typeof(TraceLevel), appSettings.ServiceLogLevel);
-        //                    }
-        //                    catch
-        //                    {
-        //                        LogableTask.DefaultTraceLevel = TraceLevel.Info;
-        //                        LogableTask.LogMonoActivityTask("GetTraceLevel", MethodBase.GetCurrentMethod(), TraceLevel.Error, "Failed to extract trace level from database");
-        //                    }
-        //                    LogableTask.LogMonoActivityTask("Current DateTime", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Rerun-Current DateTime: " + DateTime.Now.ToString());
-        //                    //File.AppendAllText(path, DateTime.Now +" Hello World from DoWork\n");
-        //                    Atm.AtmReader reader = Atm.ExecuteReader("is_active=1");
-        //                    StringBuilder sb = new StringBuilder();
-        //                    while (reader.Read())
-        //                    {
-        //                        sb.Append(reader.CurrentAtm.ATMId + ",");
-        //                    }
-        //                    reader.Close();
-        //                    sb.Remove(sb.Length - 1, 1);
-        //                    LogableTask.LogMonoActivityTask("ATMList", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "ATM: " + sb.ToString());
-        //                    string ATM_id = sb.ToString();
-        //                    ReconciliationBatch batch = null;
-        //                    List<int> batchID = new List<int>();
-        //                    if (ATM_id.Contains(","))
-        //                    {
-        //                        string[] ATMs = ATM_id.Split(',');
-
-        //                        for (int i = 0; i <= ATMs.Length - 1; i++)
-        //                        {
-        //                            batch = new ReconciliationBatch();
-        //                            batch.TransactionStartDate = trxnDate;
-        //                            batch.TransactionEndDate = trxnDate.AddDays(1);
-        //                            batch.AcceptableDifference = !string.IsNullOrEmpty(recon.Difference) ? Convert.ToDecimal(recon.Difference) : 0;
-        //                            batch.CreationTime = trxnDate.AddDays(1);
-        //                            batch.CreatedBy = 1;
-        //                            batch.RetryCount = 10;
-        //                            batch.Status = "Scheduled";
-        //                            batch.AtmId = int.Parse(ATMs[i].ToString());
-        //                            batch.AcceptableDifferenceType = recon.DifferenceType;
-        //                            batch.Save();
-        //                            batchID.Add(batch.ReconciliationBatchId);
-        //                        }
-        //                    }
-        //                    else
-        //                    {
-        //                        batch = new ReconciliationBatch();
-        //                        batch.TransactionStartDate = trxnDate;
-        //                        batch.TransactionEndDate = trxnDate.AddDays(1);
-        //                        batch.AcceptableDifference = !string.IsNullOrEmpty(recon.Difference) ? Convert.ToDecimal(recon.Difference) : 0;
-        //                        batch.CreationTime = trxnDate;
-        //                        batch.CreatedBy = 1;
-        //                        batch.RetryCount = 10;
-        //                        batch.Status = "Scheduled";
-        //                        batch.AtmId = int.Parse(ATM_id);
-        //                        batch.AcceptableDifferenceType = recon.DifferenceType;
-        //                        batch.Save();
-        //                        batchID.Add(batch.ReconciliationBatchId);
-        //                    }
-
-        //                    if (File.Exists(recon.SwitchFilePath))
-        //                    {
-        //                        LogableTask.LogMonoActivityTask("SwitchFileExists", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Switch File Exists");
-        //                        foreach (int _batchID in batchID)
-        //                        {
-        //                            string data = Encoding.ASCII.GetString(File.ReadAllBytes(recon.SwitchFilePath));
-        //                            //LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "data =  " + data);
-        //                            string[] parts = data.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        //                            //LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Parts length =  " + parts.Length);
-
-        //                            //Atm.AtmReader reader1 = Atm.ExecuteReader("ATM_id = 12");
-        //                            //StringBuilder sb1 = new StringBuilder();
-        //                            //while (reader1.Read())
-        //                            //{
-        //                            //    sb1.Append(reader1.CurrentAtm.ATMId + ",");
-        //                            //}
-        //                            //to get the atm title of the iterated batchid
-        //                            string batchAtmTitle = "";
-        //                            ReconciliationBatch.ReconciliationBatchReader batchRecon = ReconciliationBatch.ExecuteReader("reconciliation_batch_id = " + _batchID);
-        //                            while (batchRecon.Read())
-        //                            {
-        //                                Atm.AtmReader _batchAtm = Atm.ExecuteReader("ATM_id = " + batchRecon.CurrentReconciliationBatch.AtmId);
-        //                                while (_batchAtm.Read())
-        //                                {
-        //                                    batchAtmTitle = _batchAtm.CurrentAtm.Title.Trim();
-        //                                }
-        //                            }
-
-
-        //                            foreach (string part in parts)
-        //                            {
-
-        //                                string[] subParts = part.Split(',');
-        //                                if (subParts[4].Length < 5)
-        //                                {
-        //                                    subParts[4] = "0" + subParts[4];
-        //                                }
-        //                                ReconciliationSwitchData switchData = new ReconciliationSwitchData();
-        //                                ReconciliationBnaSwitchData BNAswitchData = new ReconciliationBnaSwitchData();
-        //                                //check if batch atm title matches the CSV data atm title
-        //                                if (batchAtmTitle == subParts[0].Replace("?", "").Trim())
-        //                                {
-        //                                    if (subParts[8].Contains("Withdrawal") || subParts[8].Contains("Cwd"))
-        //                                    {
-        //                                        switchData.ReconciliationBatchId = _batchID;
-        //                                        switchData.AtmId = subParts[0].Replace("?", "").Trim();
-        //                                        switchData.CardNumber = subParts[1].Trim();
-        //                                        switchData.CustomerAccountNo = subParts[2].Trim();
-        //                                        switchData.TransactionDate = subParts[3].Trim();
-        //                                        switchData.TransactionTime = subParts[4].Trim();
-        //                                        switchData.TransactionAmount = decimal.Parse(subParts[5].Trim());
-        //                                        switchData.TransactionCurrency = subParts[6].Trim();
-        //                                        switchData.TransactionSequence = subParts[7].Trim();
-        //                                        switchData.TransactionType = subParts[8].Trim();
-        //                                        switchData.TransactionResponse = subParts[9].Trim();
-        //                                        switchData.TransactionSettlementDate = DateTime.ParseExact(subParts[10].Trim(), "yyyyMMdd", null);
-        //                                        switchData.CardNetwork = subParts[11].Trim();
-        //                                        switchData.CardIssuer = subParts[12].Trim();
-        //                                        switchData.Save();
-        //                                    }
-        //                                    else if (subParts[8].Contains("Deposit") && !subParts[8].Contains("Cheque"))
-        //                                    {
-        //                                        BNAswitchData.ReconciliationBatchId = _batchID;
-        //                                        BNAswitchData.AtmId = subParts[0].Trim();
-        //                                        BNAswitchData.CardNumber = subParts[1];
-        //                                        BNAswitchData.CustomerAccountNo = subParts[2];
-        //                                        BNAswitchData.TransactionDate = subParts[3].Trim();
-        //                                        BNAswitchData.TransactionTime = subParts[4];
-        //                                        BNAswitchData.TransactionAmount = decimal.Parse(subParts[5]);
-        //                                        BNAswitchData.TransactionCurrency = subParts[6];
-        //                                        BNAswitchData.TransactionSequence = subParts[7];
-        //                                        BNAswitchData.TransactionType = subParts[8];
-        //                                        BNAswitchData.TransactionResponse = subParts[9];
-        //                                        BNAswitchData.TransactionSettlementDate = DateTime.ParseExact(subParts[10], "yyyyMMdd", null);
-        //                                        BNAswitchData.CardNetwork = subParts[11];
-        //                                        BNAswitchData.CardIssuer = subParts[12];
-        //                                        BNAswitchData.Save();
-        //                                    }
-        //                                    else
-        //                                    {
-        //                                        LogableTask.LogMonoActivityTask("TransactionType", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Transaction Type = " + subParts[8]);
-        //                                    }
-        //                                }
-
-        //                            }
-        //                        }
-        //                        File.Delete(recon.BackupFolderPath + "\\switchfile" + trxnDate.AddDays(1).ToString("ddMMyyyy") + ".csv");
-        //                        File.Move(recon.SwitchFilePath, recon.BackupFolderPath + "\\switchfile" + trxnDate.AddDays(1).ToString("ddMMyyyy") + ".csv");
-
-        //                    }
-
-        //                    if (File.Exists(recon.HostFilePath))
-        //                    {
-        //                        LogableTask.LogMonoActivityTask("HostFileExists", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Host File Exists");
-        //                        foreach (int _batchID in batchID)
-        //                        {
-        //                            string data = Encoding.ASCII.GetString(File.ReadAllBytes(recon.HostFilePath));
-        //                            string[] parts = data.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-
-        //                            //to get the atm title of the iterated batchid
-        //                            string batchAtmTitle = "";
-        //                            ReconciliationBatch.ReconciliationBatchReader batchRecon = ReconciliationBatch.ExecuteReader("reconciliation_batch_id = " + _batchID);
-        //                            while (batchRecon.Read())
-        //                            {
-        //                                Atm.AtmReader _batchAtm = Atm.ExecuteReader("ATM_id = " + batchRecon.CurrentReconciliationBatch.AtmId);
-        //                                while (_batchAtm.Read())
-        //                                {
-        //                                    batchAtmTitle = _batchAtm.CurrentAtm.Title.Trim();
-        //                                }
-        //                            }
-
-        //                            foreach (string part in parts)
-        //                            {
-        //                                string[] subParts = part.Split(',');
-        //                                ReconciliationHostData hostData = new ReconciliationHostData();
-        //                                ReconciliationBnaHostData BNAhostData = new ReconciliationBnaHostData();
-        //                                //check if batch atm title matches the CSV data atm title
-        //                                if (batchAtmTitle == subParts[0].Trim())
-        //                                {
-        //                                    if (withdrawalTran.ContainsKey(Convert.ToInt32(subParts[8])))
-        //                                    {
-        //                                        hostData.ReconciliationBatchId = _batchID;
-        //                                        hostData.AtmId = subParts[0];
-        //                                        hostData.CardNumber = subParts[1];
-        //                                        hostData.CustomerAccountNo = subParts[2];
-        //                                        hostData.TransactionDate = subParts[3];
-        //                                        hostData.TransactionTime = subParts[4];
-        //                                        hostData.TransactionAmount = decimal.Parse(subParts[5]);
-        //                                        hostData.TransactionCurrency = subParts[6];
-        //                                        hostData.TransactionSequence = subParts[7];
-        //                                        hostData.TransactionType = withdrawalTran[Convert.ToInt32(subParts[8])];
-        //                                        hostData.TransactionResponse = subParts[9];
-        //                                        hostData.TransactionSettlementDate = DateTime.ParseExact(subParts[10], "yyyyMMdd", null);
-        //                                        hostData.CardNetwork = subParts[11];
-        //                                        hostData.CardIssuer = subParts[12];
-        //                                        hostData.CardAcquirer = Customer_FIT_BankName;// "GBK"; //always  GBK for ON US Withdrawal
-        //                                        hostData.IsKnet = false;
-        //                                        hostData.Save();
-        //                                    }
-        //                                    else if (depositTran.ContainsKey(Convert.ToInt32(subParts[8])))
-        //                                    {
-        //                                        BNAhostData.ReconciliationBatchId = _batchID;
-        //                                        BNAhostData.AtmId = subParts[0];
-        //                                        BNAhostData.CardNumber = subParts[1];
-        //                                        BNAhostData.CustomerAccountNo = subParts[2];
-        //                                        BNAhostData.TransactionDate = subParts[3];
-        //                                        BNAhostData.TransactionTime = subParts[4];
-        //                                        BNAhostData.TransactionAmount = decimal.Parse(subParts[5]);
-        //                                        BNAhostData.TransactionCurrency = subParts[6];
-        //                                        BNAhostData.TransactionSequence = subParts[7];
-        //                                        BNAhostData.TransactionType = depositTran[Convert.ToInt32(subParts[8])];
-        //                                        BNAhostData.TransactionResponse = subParts[9];
-        //                                        BNAhostData.TransactionSettlementDate = DateTime.ParseExact(subParts[10], "yyyyMMdd", null);
-        //                                        BNAhostData.CardNetwork = subParts[11];
-        //                                        BNAhostData.CardIssuer = subParts[12];
-        //                                        BNAhostData.Save();
-        //                                    }
-        //                                }
-        //                            }
-        //                        }
-
-        //                        string data1 = Encoding.ASCII.GetString(File.ReadAllBytes(recon.HostFilePath));
-        //                        string[] parts1 = data1.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        //                        foreach (string part in parts1)
-        //                        {
-        //                            string[] subParts = part.Split(',');
-        //                            ReconciliationHostData hostData = new ReconciliationHostData();
-        //                            ReconciliationBnaHostData BNAhostData = new ReconciliationBnaHostData();
-        //                            //check if batch atm title matches the CSV data atm title
-        //                            if (Cardless_Tellerx_TerminalID == subParts[0].Trim())
-        //                            {
-        //                                if (withdrawalTran.ContainsKey(Convert.ToInt32(subParts[8])))
-        //                                {
-        //                                    hostData.ReconciliationBatchId = Cardless_Tellerx_BatchID;
-        //                                    hostData.AtmId = subParts[0];
-        //                                    hostData.CardNumber = subParts[1];
-        //                                    hostData.CustomerAccountNo = subParts[2];
-        //                                    hostData.TransactionDate = subParts[3];
-        //                                    hostData.TransactionTime = subParts[4];
-        //                                    hostData.TransactionAmount = decimal.Parse(subParts[5]);
-        //                                    hostData.TransactionCurrency = subParts[6];
-        //                                    hostData.TransactionSequence = subParts[7];
-        //                                    hostData.TransactionType = withdrawalTran[Convert.ToInt32(subParts[8])];
-        //                                    hostData.TransactionResponse = subParts[9];
-        //                                    hostData.TransactionSettlementDate = DateTime.ParseExact(subParts[10], "yyyyMMdd", null);
-        //                                    hostData.CardNetwork = subParts[11];
-        //                                    hostData.CardIssuer = subParts[12];
-        //                                    hostData.IsKnet = false;
-        //                                    hostData.Save();
-        //                                }
-        //                                else if (depositTran.ContainsKey(Convert.ToInt32(subParts[8])))
-        //                                {
-        //                                    BNAhostData.ReconciliationBatchId = Cardless_Tellerx_BatchID;
-        //                                    BNAhostData.AtmId = subParts[0];
-        //                                    BNAhostData.CardNumber = subParts[1];
-        //                                    BNAhostData.CustomerAccountNo = subParts[2];
-        //                                    BNAhostData.TransactionDate = subParts[3];
-        //                                    BNAhostData.TransactionTime = subParts[4];
-        //                                    BNAhostData.TransactionAmount = decimal.Parse(subParts[5]);
-        //                                    BNAhostData.TransactionCurrency = subParts[6];
-        //                                    BNAhostData.TransactionSequence = subParts[7];
-        //                                    BNAhostData.TransactionType = depositTran[Convert.ToInt32(subParts[8])];
-        //                                    BNAhostData.TransactionResponse = subParts[9];
-        //                                    BNAhostData.TransactionSettlementDate = DateTime.ParseExact(subParts[10], "yyyyMMdd", null);
-        //                                    BNAhostData.CardNetwork = subParts[11];
-        //                                    BNAhostData.CardIssuer = subParts[12];
-        //                                    BNAhostData.Save();
-        //                                }
-        //                            }
-        //                        }
-
-
-        //                        File.Delete(recon.BackupFolderPath + "\\hostfile" + trxnDate.AddDays(1).ToString("ddMMyyyy") + ".csv");
-        //                        File.Move(recon.HostFilePath, recon.BackupFolderPath + "\\hostfile" + trxnDate.AddDays(1).ToString("ddMMyyyy") + ".csv");
-        //                    }
-
-        //                    if (File.Exists(knetTapeFilePath))
-        //                    {
-        //                        LogableTask.LogMonoActivityTask("STFileExists", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "ST File Exists");
-        //                        foreach (int _batchID in batchID)
-        //                        {
-
-        //                            //to get the atm title of the iterated batchid
-        //                            string batchAtmTitle = "";
-        //                            ReconciliationBatch.ReconciliationBatchReader batchRecon = ReconciliationBatch.ExecuteReader("reconciliation_batch_id = " + _batchID);
-        //                            while (batchRecon.Read())
-        //                            {
-        //                                Atm.AtmReader _batchAtm = Atm.ExecuteReader("ATM_id = " + batchRecon.CurrentReconciliationBatch.AtmId);
-        //                                while (_batchAtm.Read())
-        //                                {
-        //                                    batchAtmTitle = _batchAtm.CurrentAtm.Title.Trim();
-        //                                }
-        //                            }
-        //                            string data = Encoding.ASCII.GetString(File.ReadAllBytes(knetTapeFilePath));
-        //                            string[] parts = data.Split(new string[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        //                            foreach (string part in parts)
-        //                            {
-        //                                if (part.Trim() != "")
-        //                                {
-        //                                    string serviceType = part.Substring(0, 4).Trim();
-        //                                    string cardAcquirer = part.Substring(98, 4).Trim();
-        //                                    string cardIssuer = part.Substring(144, 4).Trim();
-        //                                    string transCode = part.Substring(40, 2).Trim();//transCode == "10" WITHDRAWAL
-        //                                    string terminalID = part.Substring(102, 16).Trim();
-
-        //                                    //Customer_FIT_BankName GBK
-        //                                    if (serviceType == "ATM" && cardAcquirer == Customer_FIT_BankName && cardIssuer != Customer_FIT_BankName && transCode == "10"
-        //                                        && terminalID.Trim() == batchAtmTitle.Trim())
-        //                                    {
-        //                                        string cardNo = part.Substring(148, 19).Trim().Replace("X", "*");
-        //                                        string transactionDate = "20" + part.Substring(8, 6).Trim();
-        //                                        string transactionTime = part.Substring(14, 2).Trim() + ":" + part.Substring(16, 2).Trim();
-        //                                        string currency = "KWD";
-        //                                        string amount = part.Substring(43, 11).Trim();
-        //                                        string seqNo = part.Substring(28, 12).Trim();
-        //                                        string transactionResponse = part.Substring(315, 3).Trim();
-        //                                        string settlementDate = part.Substring(22, 6).Trim();
-        //                                        string authType = part.Substring(118, 4).Trim();
-        //                                        // int _batchID = 101;
-
-        //                                        ReconciliationHostData hostData = new ReconciliationHostData();
-        //                                        hostData.ReconciliationBatchId = _batchID;
-        //                                        hostData.AtmId = terminalID;
-
-        //                                        string starString = "";
-        //                                        int starstringLen = cardNo.Trim().Length - 10;
-        //                                        for (int sl = 0; sl < starstringLen; sl++)
-        //                                        { starString = starString + "*"; }
-
-        //                                        hostData.CardNumber = cardNo.Substring(0, 6) + starString;
-        //                                        hostData.CardNumber = hostData.CardNumber + cardNo.Substring(hostData.CardNumber.Length, 4);
-
-        //                                        // hostData.CardNumber = cardNo.Substring(0, 6) + "******" + cardNo.Substring(12, cardNo.Length - 12);//4 cardno can be 15/16 digit
-        //                                        // hostData.CustomerAccountNo = subPar;
-        //                                        hostData.TransactionDate = transactionDate;
-        //                                        hostData.TransactionTime = transactionTime;
-        //                                        hostData.TransactionAmount = decimal.Parse(amount) / 1000;
-        //                                        hostData.TransactionCurrency = currency;
-        //                                        hostData.TransactionSequence = seqNo;
-        //                                        if (authType == "0210")
-        //                                            hostData.TransactionType = withdrawalTran[10];  //cash withdrawal-KNET
-        //                                        else if (authType == "0420") //reversal
-        //                                            hostData.TransactionType = withdrawalTran[420];  //withdrawal-KNET-correction
-        //                                        hostData.TransactionResponse = transactionResponse;
-        //                                        hostData.TransactionSettlementDate = DateTime.ParseExact(settlementDate, "yyMMdd", null);
-        //                                        // hostData.CardNetwork = subParts[11];
-        //                                        hostData.CardIssuer = cardIssuer;
-        //                                        hostData.CardAcquirer = cardAcquirer;
-        //                                        hostData.IsKnet = true;
-        //                                        hostData.Save();
-
-        //                                        LogableTask.LogMonoActivityTask("", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "KNET TAPE :" + serviceType +
-        //                                          ", " + terminalID + ", " + cardAcquirer + ", " + cardIssuer);
-        //                                    }
-        //                                }
-        //                            }
-
-        //                        }
-        //                        File.Delete(recon.BackupFolderPath + "\\" + knetTapeFileName + "file" + trxnDate.AddDays(1).ToString("ddMMyyyy") + ".txt");
-        //                        File.Move(knetTapeFilePath, recon.BackupFolderPath + "\\" + knetTapeFileName + "file" + trxnDate.AddDays(1).ToString("ddMMyyyy") + ".txt");
-        //                        LogableTask.LogMonoActivityTask("Sleep", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Thread going to sleep");
-
-        //                    }
-
-        //                    LogableTask.LogMonoActivityTask("BatchId", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Info, "Rerun-BatchId = " + string.Join(", ", batchID));
-        //                    //Insert Batch Data--------END *************************
-
-
-        //                }
-
-
-        //            }
-        //        }
-        //        else
-        //        {
-        //            LogableTask.DefaultTraceLevel = TraceLevel.Info;
-        //            LogableTask.LogMonoActivityTask("Switch_HostFileAbsence", MethodBase.GetCurrentMethod(), TraceLevel.Error, "Switch or Host or Knet ST File is missing");
-
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogableTask.LogMonoActivityTask("Exception", System.Reflection.MethodBase.GetCurrentMethod(), TraceLevel.Error, ex.ToString());
-        //        EventLog.WriteEntry("CCMSSchedular", "Error in DoWork(). detail: " + ex.Message + ex.StackTrace, EventLogEntryType.Error);
-        //    }
-        //}
-        //*************************************************
 
         public void OnDebug()
         {
@@ -2578,6 +1512,88 @@ namespace ReconciliationScheduleService
 
                 return CleanDataTable(result);
             }
+        }
+        public static DataTable PipeToDataTable(string filePath)
+        {
+            if (!File.Exists(filePath))
+                throw new FileNotFoundException("Pipe separated file not found.", filePath);
+
+            var lines = File.ReadAllLines(filePath);
+
+            if (lines.Length == 0)
+                throw new ArgumentException("File is empty.");
+
+            // Find header row
+            int headerIndex = -1;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+
+                if (!string.IsNullOrWhiteSpace(line) &&
+                    line.Contains("|") &&
+                    !line.Trim().StartsWith("---"))
+                {
+                    headerIndex = i;
+                    break;
+                }
+            }
+
+            if (headerIndex == -1)
+                throw new ArgumentException("No valid pipe-separated header row found.");
+
+            string[] headers = lines[headerIndex]
+                .Split('|')
+                .Select(x => x.Trim())
+                .ToArray();
+
+            var dt = new DataTable();
+
+            foreach (string header in headers)
+            {
+                dt.Columns.Add(
+                    string.IsNullOrWhiteSpace(header)
+                        ? $"Column{dt.Columns.Count}"
+                        : header,
+                    typeof(string));
+            }
+
+            // Skip separator row if present
+            int dataStartIndex = headerIndex + 1;
+
+            if (dataStartIndex < lines.Length)
+            {
+                var separatorLine = lines[dataStartIndex].Trim();
+
+                if (Regex.IsMatch(separatorLine, @"^[-| ]+$"))
+                {
+                    dataStartIndex++;
+                }
+            }
+
+            // Read data rows
+            for (int i = dataStartIndex; i < lines.Length; i++)
+            {
+                string line = lines[i];
+
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                string[] values = line.Split('|');
+
+                var row = dt.NewRow();
+
+                for (int c = 0; c < dt.Columns.Count; c++)
+                {
+                    row[c] = c < values.Length
+                        ? values[c].Trim()
+                        : string.Empty;
+                }
+
+                dt.Rows.Add(row);
+            }
+
+            return CleanDataTable(dt);
         }
 
         private static DataTable CleanDataTable(DataTable source)
